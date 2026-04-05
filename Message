@@ -1,86 +1,165 @@
--- LocalScript - Sistema de texto flotante apilado con fade out
+local allowedUsers = {
+["BF_FNFOficial20"] = true,
+["camera_yt6"] = true,
+["bluen23xl"] = true,
+["holaXDJABAO"] = true,
+["vamike160319"] = true,
+["c0oIkid25"] = true,
+["yisuselpro80"] = true,
+["Alex2AccountGG"] = true,
+["AlexCoderOficiaI"] = true
+}
 
 local player = game.Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = script.Parent
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "TextOverlayGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = playerGui
+local event = ReplicatedStorage:WaitForChild("GlobalMessageEvent")
 
--- Frame contenedor: arriba al centro (donde aparece el texto)
-local textFrame = Instance.new("Frame")
-textFrame.Size = UDim2.new(0.5, 0, 0.3, 0)
-textFrame.Position = UDim2.new(0.25, 0, 0.05, 0) -- arriba al centro
-textFrame.BackgroundTransparency = 1
-textFrame.ClipsDescendants = false
-textFrame.Parent = screenGui
+local floatingMessages = {}
+local MAX_MESSAGES = 67
+local MESSAGE_DURATION = 7
+local textBoxInstance
+local clientEventConnected = false
 
-local listLayout = Instance.new("UIListLayout")
-listLayout.Parent = textFrame
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-listLayout.Padding = UDim.new(0, 2)
+local sound = Instance.new("Sound")
+sound.SoundId = "rbxassetid://116827615506683"
+sound.Volume = 1
+sound.PlayOnRemove = false
+sound.Parent = screenGui
 
--- TextBox abajo al centro
-local textBox = Instance.new("TextBox")
-textBox.Size = UDim2.new(0.25, 0, 0.05, 0)
-textBox.Position = UDim2.new(0.35, 0, 0.88, 0) -- abajo centro
-textBox.PlaceholderText = "Escribe aqui..."
-textBox.ClearTextOnFocus = false
-textBox.Text = ""
-textBox.Font = Enum.Font.SourceSansBold
-textBox.TextSize = 18
-textBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-textBox.BorderSizePixel = 0
-textBox.Parent = screenGui
-
-Instance.new("UICorner", textBox).CornerRadius = UDim.new(0, 6)
-
-local orderCounter = 0
-
-local function createFloatingText(texto)
-	orderCounter = orderCounter + 1
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 0, 30)
-	label.BackgroundTransparency = 1
-	label.Text = texto
-	label.Font = Enum.Font.SourceSansBold
-	label.TextSize = 22
-	label.TextColor3 = Color3.fromRGB(255, 255, 255)
-	label.TextTransparency = 0
-	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-	label.TextStrokeTransparency = 0
-	label.TextXAlignment = Enum.TextXAlignment.Center
-	label.RichText = false
-	label.LayoutOrder = orderCounter
-	label.Parent = textFrame
-
-	task.delay(7, function()
-		local steps = 30
-		local interval = 0.5 / steps
-
-		for i = 1, steps do
-			if label and label.Parent then
-				local t = i / steps
-				label.TextTransparency = t
-				label.TextStrokeTransparency = t
-			end
-			task.wait(interval)
-		end
-
-		if label and label.Parent then
-			label:Destroy()
-		end
-	end)
+local function updatePositions()
+    local currentY = 0.1
+    for i, label in ipairs(floatingMessages) do
+        if label.Parent then
+            label.Position = UDim2.new(0, 0, currentY, 0)
+            currentY = currentY + label.Size.Y.Scale
+        end
+    end
 end
 
-textBox.FocusLost:Connect(function(enterPressed)
-	if enterPressed and textBox.Text ~= "" then
-		createFloatingText(textBox.Text)
-		textBox.Text = ""
-	end
-end)
+local function calculateTextSize(messageLength)
+    local baseSize = 21
+    if messageLength <= 50 then
+        return baseSize
+    elseif messageLength <= 100 then
+        return baseSize - 2
+    elseif messageLength <= 150 then
+        return baseSize - 4
+    elseif messageLength <= 200 then
+        return baseSize - 6
+    elseif messageLength <= 250 then
+        return baseSize - 8
+    else
+        return baseSize - 10
+    end
+end
+
+local function calculateLabelHeight(messageLength)
+    if messageLength <= 80 then
+        return 0.06
+    elseif messageLength <= 160 then
+        return 0.09
+    elseif messageLength <= 240 then
+        return 0.12
+    else
+        return 0.15
+    end
+end
+
+local function createFloatingText(message)
+    if #floatingMessages >= MAX_MESSAGES then
+        local oldest = table.remove(floatingMessages, 1)
+        if oldest and oldest.Parent then oldest:Destroy() end
+    end
+    
+    local messageLength = #message
+    local labelHeight = calculateLabelHeight(messageLength)
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, labelHeight, 0)
+    label.Position = UDim2.new(0, 0, 0.1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = message
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeTransparency = 0.1
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.TextWrapped = true
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = calculateTextSize(messageLength)
+    label.TextYAlignment = Enum.TextYAlignment.Top
+    label.Parent = screenGui
+    label.TextTransparency = 0
+    
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(0, 0, 0)
+    uiStroke.Thickness = 0.8
+    uiStroke.Transparency = 0
+    uiStroke.Parent = label
+    
+    table.insert(floatingMessages, label)
+    updatePositions()
+    
+    task.delay(MESSAGE_DURATION, function()
+        if label and label.Parent then
+            local uiStroke = label:FindFirstChildOfClass("UIStroke")
+            local tweenTargets = {
+                TextTransparency = 1,
+                TextStrokeTransparency = 1
+            }
+            local tween = TweenService:Create(label, TweenInfo.new(1.5), tweenTargets)
+            tween:Play()
+            
+            if uiStroke then
+                local strokeTween = TweenService:Create(uiStroke, TweenInfo.new(1.5), {
+                    Transparency = 1
+                })
+                strokeTween:Play()
+            end
+            
+            tween.Completed:Connect(function()
+                if label and label.Parent then
+                    label:Destroy()
+                    for i, v in ipairs(floatingMessages) do
+                        if v == label then
+                            table.remove(floatingMessages, i)
+                            break
+                        end
+                    end
+                    updatePositions()
+                end
+            end)
+        end
+    end)
+end
+
+if allowedUsers[player.Name] then
+    textBoxInstance = Instance.new("TextBox")
+    textBoxInstance.Size = UDim2.new(0.35, 0, 0.09, 0)
+    textBoxInstance.Position = UDim2.new(0.325, 0, 0.85, 0)
+    textBoxInstance.PlaceholderText = "Escribe aquí..."
+    textBoxInstance.ClearTextOnFocus = false
+    textBoxInstance.Text = ""
+    textBoxInstance.TextScaled = true
+    textBoxInstance.TextWrapped = true
+    textBoxInstance.BackgroundTransparency = 1
+    textBoxInstance.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textBoxInstance.Parent = screenGui
+    
+    textBoxInstance.FocusLost:Connect(function(enterPressed)
+        if enterPressed and textBoxInstance.Text ~= "" then
+            local msg = tostring(textBoxInstance.Text):sub(1,300)
+            event:FireServer(msg)
+            textBoxInstance.Text = ""
+        end
+    end)
+end
+
+if not clientEventConnected then
+    event.OnClientEvent:Connect(function(message)
+        createFloatingText(message)
+        sound:Play()
+    end)
+    clientEventConnected = true
+end
