@@ -26,7 +26,7 @@ listLayout.Padding = UDim.new(0, 2)
 -- TextBox abajo al centro
 local textBox = Instance.new("TextBox")
 textBox.Size = UDim2.new(0.25, 0, 0.05, 0)
-textBox.Position = UDim2.new(0.375, 0, 0.85, 0) -- abajo centro
+textBox.Position = UDim2.new(0.35, 0, 0.88, 0) -- abajo centro
 textBox.PlaceholderText = "Escribe aqui..."
 textBox.ClearTextOnFocus = false
 textBox.Text = ""
